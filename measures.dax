@@ -1,0 +1,52 @@
+// Retail Sales Analysis - all DAX measures
+// Usage: paste in DAX query view, run, then use "Update model: Add new measure"
+// above each MEASURE line to save it permanently in the model.
+
+DEFINE
+    // ---- Base measures ----
+    MEASURE Orders[Total Sales] = SUM(Orders[Sales])
+    MEASURE Orders[Total Profit] = SUM(Orders[Profit])
+    MEASURE Orders[Profit Margin %] = DIVIDE([Total Profit], [Total Sales])
+    MEASURE Orders[Order Count] = DISTINCTCOUNT(Orders[Order ID])
+    MEASURE Orders[Units Sold] = SUM(Orders[Quantity])
+    MEASURE Orders[Customer Count] = DISTINCTCOUNT(Orders[Customer ID])
+    MEASURE Orders[Average Order Value] = DIVIDE([Total Sales], [Order Count])
+    MEASURE Orders[Average Discount] = AVERAGE(Orders[Discount])
+    MEASURE Orders[Average Delivery Days] = AVERAGE(Orders[Delivery Days])
+    MEASURE Orders[Row Count] = COUNTROWS(Orders)
+
+    // ---- Time intelligence ----
+    MEASURE Orders[Sales PY] = CALCULATE([Total Sales], SAMEPERIODLASTYEAR('Calendar'[Date]))
+    MEASURE Orders[Sales YoY %] = DIVIDE([Total Sales] - [Sales PY], [Sales PY])
+    MEASURE Orders[Sales YTD] = TOTALYTD([Total Sales], 'Calendar'[Date])
+    MEASURE Orders[Rolling 3M Sales] =
+        CALCULATE([Total Sales], DATESINPERIOD('Calendar'[Date], MAX('Calendar'[Date]), -3, MONTH))
+    MEASURE Orders[Margin Change vs PY] =
+        VAR CurrentMargin = [Profit Margin %]
+        VAR PreviousMargin = CALCULATE([Profit Margin %], SAMEPERIODLASTYEAR('Calendar'[Date]))
+        RETURN IF(NOT ISBLANK(PreviousMargin), CurrentMargin - PreviousMargin)
+
+    // ---- Ranking and shares ----
+    MEASURE Orders[Profit Rank] = RANKX(ALL(Products[Sub-Category]), [Total Profit])
+    MEASURE Orders[Sales % of Total] = DIVIDE([Total Sales], CALCULATE([Total Sales], ALLSELECTED()))
+    MEASURE Orders[Top 10 Customers Sales] =
+        CALCULATE([Total Sales], TOPN(10, ALL(Customers[Customer ID]), [Total Sales]))
+    MEASURE Orders[Top 10 Customers Share] =
+        DIVIDE([Top 10 Customers Sales], CALCULATE([Total Sales], ALL(Customers)))
+
+    // ---- Discounts and losses ----
+    MEASURE Orders[High Discount Sales] = CALCULATE([Total Sales], Orders[Discount] >= 0.3)
+    MEASURE Orders[Gross Sales at List Price] =
+        SUMX(Orders, Orders[Quantity] * RELATED(Products[List Price]))
+    MEASURE Orders[Discount Amount] = [Gross Sales at List Price] - [Total Sales]
+    MEASURE Orders[Discount % of List] = DIVIDE([Discount Amount], [Gross Sales at List Price])
+    MEASURE Orders[Customers with Loss] =
+        COUNTROWS(FILTER(VALUES(Customers[Customer ID]), [Total Profit] < 0))
+
+EVALUATE
+    ROW(
+        "Row Count", [Row Count],
+        "Total Sales", [Total Sales],
+        "Profit Margin %", [Profit Margin %],
+        "Customers with Loss", [Customers with Loss]
+    )
